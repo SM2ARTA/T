@@ -6,164 +6,96 @@
 <title>Warehouse Ops — FIFA WC 2026</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html,body,#root{min-height:100vh;width:100%}
+html,body,#root{height:100vh;width:100%;overflow:hidden}
 body{background:#0b0f19;font-family:system-ui,-apple-system,sans-serif;color:#e2e8f0}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @keyframes barGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar{width:3px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:#1e2d44;border-radius:3px}
+::-webkit-scrollbar-thumb{background:#1e2d44;border-radius:2px}
 </style>
 </head>
 <body>
 <div id="root"></div>
-
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-
 <script>
 (function(){
-var e=React.createElement, useState=React.useState, useEffect=React.useEffect, useMemo=React.useMemo;
+var e=React.createElement,useState=React.useState,useEffect=React.useEffect,useMemo=React.useMemo;
 
-/* ── Supabase ─────────────────────────────────────────── */
 var SB_URL="https://nuaxnvtwohfgbrluhsug.supabase.co";
 var SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51YXhudnR3b2hmZ2JybHVoc3VnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3NTgyNjAsImV4cCI6MjA4ODMzNDI2MH0.7WrxeoTkcT05GRXDalb0wv3q0GrXL7OGWLmY4IbqaTU";
 
-function sbSave(d){
-  fetch(SB_URL+"/rest/v1/dashboard_state?id=eq.1",{
-    method:"PATCH",
-    headers:{"Content-Type":"application/json",apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,Prefer:"return=representation"},
-    body:JSON.stringify({data:d,updated_at:new Date().toISOString()})
-  }).then(function(r){return r.json();}).then(function(rows){
-    if(!rows||rows.length===0){
-      fetch(SB_URL+"/rest/v1/dashboard_state",{
-        method:"POST",
-        headers:{"Content-Type":"application/json",apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,Prefer:"return=minimal"},
-        body:JSON.stringify({id:1,data:d,updated_at:new Date().toISOString()})
-      });
-    }
-  }).catch(function(err){console.warn("sb:",err);});
-}
+function sbSave(d){fetch(SB_URL+"/rest/v1/dashboard_state?id=eq.1",{method:"PATCH",headers:{"Content-Type":"application/json",apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,Prefer:"return=representation"},body:JSON.stringify({data:d,updated_at:new Date().toISOString()})}).then(function(r){return r.json();}).then(function(rows){if(!rows||rows.length===0){fetch(SB_URL+"/rest/v1/dashboard_state",{method:"POST",headers:{"Content-Type":"application/json",apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,Prefer:"return=minimal"},body:JSON.stringify({id:1,data:d,updated_at:new Date().toISOString()})});}}).catch(function(err){console.warn("sb:",err);});}
+function sbLoad(){return fetch(SB_URL+"/rest/v1/dashboard_state?id=eq.1&select=data,updated_at",{headers:{apikey:SB_KEY,Authorization:"Bearer "+SB_KEY}}).then(function(r){return r.json();}).then(function(rows){return(rows&&rows[0])||null;}).catch(function(){return null;});}
 
-function sbLoad(){
-  return fetch(SB_URL+"/rest/v1/dashboard_state?id=eq.1&select=data,updated_at",{
-    headers:{apikey:SB_KEY,Authorization:"Bearer "+SB_KEY}
-  }).then(function(r){return r.json();}).then(function(rows){
-    return(rows&&rows[0])||null;
-  }).catch(function(){return null;});
-}
-
-/* ── Helpers ──────────────────────────────────────────── */
 function pDate(s){if(!s)return null;var m=String(s).match(/(\d{2}):(\d{2})\s+(\d{2})\.(\d{2})\.(\d{4})/);return m?new Date(+m[5],+m[4]-1,+m[3],+m[1],+m[2]):null;}
 function fmtD(s){var d=pDate(s);return d?d.toLocaleDateString("en-US",{month:"short",day:"numeric"}):(s||"-");}
 function dkF(s){if(!s)return null;var m=String(s).match(/(\d{2})\.(\d{2})\.(\d{4})/);return m?m[3]+"-"+m[2]+"-"+m[1]:null;}
 function pA(a){if(!a||String(a).indexOf("/")<0)return[0,0];var p=String(a).split("/");return[+p[0]||0,+p[1]||0];}
-function mapRow(r){return{number:r["Number"],date:r["Date"],type:r["Type"],from:r["From"],to:r["To"],status:r["Status"],deliveryAt:r["Delivery at"],procurement:r["Procurement"],shipmentRef:r["Shipment ref"],pallets:r["Pallets"]?Number(r["Pallets"]):null,analytic:r["Analytic"]};}
+function mapRow(r){var tp=r["Type"];if(tp==="Stock correction")tp="Outbound";return{number:r["Number"],date:r["Date"],type:tp,from:r["From"],to:r["To"],status:r["Status"],deliveryAt:r["Delivery at"],procurement:r["Procurement"],shipmentRef:r["Shipment ref"],pallets:r["Pallets"]?Number(r["Pallets"]):null,analytic:r["Analytic"]};}
 
-/* ── Theme ────────────────────────────────────────────── */
 var S1="#111827",S2="#1a2234",BD="#1e2d44",TX="#e2e8f0",TD="#7a8ba8",TM="#4a5a74";
 var GD="#d4a54a",CY="#22d3ee",GR="#34d399",RD="#f87171",AM="#fbbf24",PU="#a78bfa",BL="#60a5fa";
-var TC={"Inbound":CY,"Stock correction":AM,"Moving":PU,"Damage report":RD};
+var TC={"Inbound":CY,"Outbound":AM,"Moving":PU,"Damage report":RD};
 var STC={"Created":AM,"Completed":GR,"Dispatched":BL};
 var PRC=[CY,GD,GR,PU,BL,RD,"#f472b6","#fb923c","#a3e635"];
 
-/* ── Pure components ─────────────────────────────────── */
+function KPI(p){return e("div",{style:{background:S1,border:"1px solid "+BD,borderRadius:8,padding:"1.2vh 1vw",flex:1,minWidth:0}},e("div",{style:{fontSize:"min(0.6vw,10px)",fontWeight:700,textTransform:"uppercase",letterSpacing:1.2,color:TD,marginBottom:"0.3vh"}},p.label),e("div",{style:{fontSize:"min(2vw,28px)",fontWeight:800,color:p.color,fontFamily:"monospace",lineHeight:1,marginBottom:"0.2vh"}},p.value),p.sub?e("div",{style:{fontSize:"min(0.55vw,9px)",color:TM}},p.sub):null);}
+function Pill(p){var c=STC[p.status]||TD;return e("span",{style:{display:"inline-flex",alignItems:"center",gap:3,padding:"1px 6px",borderRadius:12,background:c+"18",color:c,fontSize:"min(0.6vw,10px)",fontWeight:600}},e("span",{style:{width:4,height:4,borderRadius:"50%",background:c,display:"inline-block"}}),p.status);}
+function TTag(p){var c=TC[p.type]||TD;return e("span",{style:{padding:"1px 5px",borderRadius:3,background:c+"15",color:c,fontSize:"min(0.6vw,10px)",fontWeight:600,borderLeft:"2px solid "+c}},p.type);}
 
-function KPI(p){
-  return e("div",{style:{background:S1,border:"1px solid "+BD,borderRadius:12,padding:"16px 20px",flex:1,minWidth:150}},
-    e("div",{style:{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:1.5,color:TD,marginBottom:5}},p.label),
-    e("div",{style:{fontSize:26,fontWeight:800,color:p.color,fontFamily:"monospace",lineHeight:1,marginBottom:2}},p.value),
-    p.sub?e("div",{style:{fontSize:11,color:TM}},p.sub):null
-  );
-}
-
-function Pill(p){
-  var c=STC[p.status]||TD;
-  return e("span",{style:{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:16,background:c+"18",color:c,fontSize:10,fontWeight:600}},
-    e("span",{style:{width:5,height:5,borderRadius:"50%",background:c,display:"inline-block"}}),p.status);
-}
-
-function TTag(p){
-  var c=TC[p.type]||TD;
-  return e("span",{style:{padding:"2px 7px",borderRadius:4,background:c+"15",color:c,fontSize:10,fontWeight:600,borderLeft:"2px solid "+c}},p.type);
-}
-
-/* ── CSS Bar Chart (horizontal) ──────────────────────── */
-function HBarChart(p){
-  var max=Math.max.apply(null,p.data.map(function(d){return d.value;}))||1;
-  return e("div",{style:{display:"flex",flexDirection:"column",gap:8}},
-    p.data.map(function(d,i){
-      var pct=Math.round(d.value/max*100);
-      var color=p.colors?p.colors[i%p.colors.length]:CY;
-      return e("div",{key:i,style:{display:"flex",alignItems:"center",gap:8}},
-        e("div",{style:{width:120,fontSize:10,color:TD,textAlign:"right",flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},title:d.name},d.name),
-        e("div",{style:{flex:1,height:10,background:S2,borderRadius:5,overflow:"hidden"}},
-          e("div",{style:{height:"100%",width:pct+"%",background:color,borderRadius:5,transformOrigin:"left",animation:"barGrow .8s ease"}})
-        ),
-        e("span",{style:{fontSize:10,fontWeight:700,color:color,fontFamily:"monospace",minWidth:24,textAlign:"right"}},d.value)
-      );
-    })
-  );
-}
-
-/* ── CSS Stacked Timeline ────────────────────────────── */
 function Timeline(p){
-  var data=p.data;
-  if(!data.length)return null;
-  var types=["Inbound","Stock correction","Moving","Damage report"];
-  var maxVal=Math.max.apply(null,data.map(function(d){var s=0;types.forEach(function(t){s+=d[t]||0;});return s;}))||1;
+  var data=p.data;if(!data.length)return null;
+  var types=["Inbound","Outbound","Moving","Damage report"];
+  var maxVal=0;data.forEach(function(d){var s=0;types.forEach(function(t){s+=d[t]||0;});if(s>maxVal)maxVal=s;});if(!maxVal)maxVal=1;
+  return e("div",{style:{display:"flex",flexDirection:"column",height:"100%"}},
+    e("div",{style:{display:"flex",alignItems:"flex-end",gap:2,flex:1,padding:"0 2px"}},
+      data.map(function(d,i){
+        var total=0;types.forEach(function(t){total+=d[t]||0;});
+        var pct=Math.max(Math.round(total/maxVal*100),3);
+        var lbl=new Date(d.date).toLocaleDateString("en-US",{month:"short",day:"numeric"});
+        return e("div",{key:i,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",minWidth:0},title:lbl+": "+total},
+          e("div",{style:{width:"100%",height:pct+"%",borderRadius:"2px 2px 0 0",display:"flex",flexDirection:"column-reverse",overflow:"hidden"}},
+            types.map(function(t,ti){var v=d[t]||0;if(!v)return null;var h=Math.max(Math.round(v/total*100),5);return e("div",{key:ti,style:{width:"100%",height:h+"%",background:TC[t],opacity:.85}});})
+          ),
+          i%Math.max(Math.floor(data.length/7),1)===0?e("div",{style:{fontSize:"min(0.5vw,8px)",color:TM,marginTop:2,whiteSpace:"nowrap"}},lbl):null
+        );
+      })
+    ),
+    e("div",{style:{display:"flex",gap:"0.8vw",marginTop:"0.4vh",justifyContent:"center",flexShrink:0}},
+      types.map(function(t){return e("div",{key:t,style:{display:"flex",alignItems:"center",gap:3,fontSize:"min(0.5vw,8px)"}},e("span",{style:{width:8,height:3,borderRadius:1,background:TC[t],display:"inline-block"}}),e("span",{style:{color:TM}},t));})
+    )
+  );
+}
 
-  return e("div",{style:{display:"flex",alignItems:"flex-end",gap:3,height:180,padding:"0 4px"}},
-    data.map(function(d,i){
-      var total=0; types.forEach(function(t){total+=d[t]||0;});
-      var barH=Math.max(Math.round(total/maxVal*160),2);
-      var dateLabel=new Date(d.date).toLocaleDateString("en-US",{month:"short",day:"numeric"});
-      return e("div",{key:i,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,minWidth:0},title:dateLabel+": "+total},
-        e("div",{style:{width:"100%",height:barH,borderRadius:"3px 3px 0 0",display:"flex",flexDirection:"column-reverse",overflow:"hidden"}},
-          types.map(function(t,ti){
-            var v=d[t]||0;if(!v)return null;
-            var h=Math.max(Math.round(v/total*barH),1);
-            return e("div",{key:ti,style:{width:"100%",height:h,background:TC[t]||TD,opacity:.85}});
-          })
-        ),
-        i%Math.max(Math.floor(data.length/8),1)===0?e("div",{style:{fontSize:8,color:TM,marginTop:2,whiteSpace:"nowrap"}},dateLabel):e("div",{style:{height:12}})
+function Donut(p){
+  var total=0;p.data.forEach(function(d){total+=d.value;});if(!total)return null;
+  var sz=80,cx=40,cy=40,r=32,r2=20,angle=-90;
+  var paths=p.data.map(function(d){
+    var sw=d.value/total*360,s=angle*Math.PI/180,en=(angle+sw)*Math.PI/180,lg=sw>180?1:0;
+    var x1=cx+r*Math.cos(s),y1=cy+r*Math.sin(s),x2=cx+r*Math.cos(en),y2=cy+r*Math.sin(en);
+    var ix1=cx+r2*Math.cos(en),iy1=cy+r2*Math.sin(en),ix2=cx+r2*Math.cos(s),iy2=cy+r2*Math.sin(s);
+    angle+=sw;return{d:"M "+x1+" "+y1+" A "+r+" "+r+" 0 "+lg+" 1 "+x2+" "+y2+" L "+ix1+" "+iy1+" A "+r2+" "+r2+" 0 "+lg+" 0 "+ix2+" "+iy2+" Z",color:d.color};
+  });
+  return e("svg",{viewBox:"0 0 80 80",style:{width:"5vw",height:"5vw",maxWidth:80}},paths.map(function(pp,i){return e("path",{key:i,d:pp.d,fill:pp.color,opacity:.85});}),e("text",{x:40,y:38,textAnchor:"middle",fill:TX,fontSize:13,fontWeight:800,fontFamily:"monospace"},total),e("text",{x:40,y:48,textAnchor:"middle",fill:TM,fontSize:7},"total"));
+}
+
+function HBar(p){
+  var max=0;p.data.forEach(function(d){if(d.value>max)max=d.value;});if(!max)max=1;
+  return e("div",{style:{display:"flex",flexDirection:"column",gap:"0.5vh"}},
+    p.data.map(function(d,i){var pct=Math.round(d.value/max*100),color=p.colors[i%p.colors.length];
+      return e("div",{key:i,style:{display:"flex",alignItems:"center",gap:6}},
+        e("div",{style:{width:"6vw",fontSize:"min(0.6vw,10px)",color:TD,textAlign:"right",flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},title:d.name},d.name),
+        e("div",{style:{flex:1,height:"0.7vh",background:S2,borderRadius:4,overflow:"hidden"}},e("div",{style:{height:"100%",width:pct+"%",background:color,borderRadius:4,transformOrigin:"left",animation:"barGrow .6s ease"}})),
+        e("span",{style:{fontSize:"min(0.6vw,10px)",fontWeight:700,color:color,fontFamily:"monospace",minWidth:"1.5vw",textAlign:"right"}},d.value)
       );
     })
   );
 }
 
-/* ── Donut Chart (SVG) ───────────────────────────────── */
-function Donut(p){
-  var total=0;p.data.forEach(function(d){total+=d.value;});
-  if(!total)return null;
-  var cx=60,cy=60,r=48,r2=30;
-  var angle=-90;
-  var paths=p.data.map(function(d){
-    var sweep=d.value/total*360;
-    var start=angle*Math.PI/180;
-    var end=(angle+sweep)*Math.PI/180;
-    var large=sweep>180?1:0;
-    var x1=cx+r*Math.cos(start),y1=cy+r*Math.sin(start);
-    var x2=cx+r*Math.cos(end),y2=cy+r*Math.sin(end);
-    var ix1=cx+r2*Math.cos(end),iy1=cy+r2*Math.sin(end);
-    var ix2=cx+r2*Math.cos(start),iy2=cy+r2*Math.sin(start);
-    var path="M "+x1+" "+y1+" A "+r+" "+r+" 0 "+large+" 1 "+x2+" "+y2+" L "+ix1+" "+iy1+" A "+r2+" "+r2+" 0 "+large+" 0 "+ix2+" "+iy2+" Z";
-    angle+=sweep;
-    return{d:path,color:d.color,name:d.name,value:d.value};
-  });
-  return e("svg",{viewBox:"0 0 120 120",style:{width:120,height:120}},
-    paths.map(function(p2,i){
-      return e("path",{key:i,d:p2.d,fill:p2.color,opacity:.85,style:{transition:"opacity .2s"},onMouseEnter:function(ev){ev.target.style.opacity="1";},onMouseLeave:function(ev){ev.target.style.opacity=".85";}});
-    }),
-    e("text",{x:60,y:58,textAnchor:"middle",fill:TX,fontSize:16,fontWeight:800,fontFamily:"monospace"},total),
-    e("text",{x:60,y:72,textAnchor:"middle",fill:TM,fontSize:8},"total")
-  );
-}
-
-/* ══════════════════════════════════════════════════════ */
 function App(){
   var _t=useState(null),txns=_t[0],setTxns=_t[1];
   var _f=useState(""),fname=_f[0],setFname=_f[1];
@@ -173,112 +105,50 @@ function App(){
   var _c=useState(new Date()),clock=_c[0],setClock=_c[1];
 
   useEffect(function(){var t=setInterval(function(){setClock(new Date());},1000);return function(){clearInterval(t);};},[]);
+  useEffect(function(){sbLoad().then(function(s){if(s&&s.data&&s.data.txns){setTxns(s.data.txns);setFname(s.data.fname||"");setUpdated(s.updated_at);}setSbOk(true);setReady(true);}).catch(function(){setReady(true);});},[]);
 
-  useEffect(function(){
-    sbLoad().then(function(s){
-      if(s&&s.data&&s.data.txns){setTxns(s.data.txns);setFname(s.data.fname||"");setUpdated(s.updated_at);}
-      setSbOk(true);setReady(true);
-    }).catch(function(){setReady(true);});
-  },[]);
-
-  function handleFile(ev){
-    var file=ev.target.files&&ev.target.files[0];
-    if(!file)return;
-    var reader=new FileReader();
-    reader.onload=function(evt){
-      try{
-        var rows;
-        if(file.name.match(/\.csv$/i)){
-          var result=Papa.parse(evt.target.result,{header:true,skipEmptyLines:true});
-          rows=result.data.map(mapRow);
-        }else{
-          var data=new Uint8Array(evt.target.result);
-          var wb=XLSX.read(data,{type:"array"});
-          var sheet=wb.Sheets[wb.SheetNames[0]];
-          rows=XLSX.utils.sheet_to_json(sheet,{defval:null}).map(mapRow);
-        }
-        setTxns(rows);setFname(file.name);
-        var now=new Date().toISOString();
-        setUpdated(now);
-        sbSave({txns:rows,fname:file.name});
-      }catch(err){console.error(err);}
-    };
-    if(file.name.match(/\.csv$/i))reader.readAsText(file);
-    else reader.readAsArrayBuffer(file);
-    ev.target.value="";
-  }
+  function handleFile(ev){var file=ev.target.files&&ev.target.files[0];if(!file)return;var reader=new FileReader();reader.onload=function(evt){try{var rows;if(file.name.match(/\.csv$/i)){var result=Papa.parse(evt.target.result,{header:true,skipEmptyLines:true});rows=result.data.map(mapRow);}else{var data=new Uint8Array(evt.target.result);var wb=XLSX.read(data,{type:"array"});var sheet=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(sheet,{defval:null}).map(mapRow);}setTxns(rows);setFname(file.name);var now=new Date().toISOString();setUpdated(now);sbSave({txns:rows,fname:file.name});}catch(err){console.error(err);}};if(file.name.match(/\.csv$/i))reader.readAsText(file);else reader.readAsArrayBuffer(file);ev.target.value="";}
 
   var st=useMemo(function(){
     if(!txns||!txns.length)return null;
-    var total=txns.length,byType={},byStatus={},byProc={},byDate={};
-    var pallets=0,items=0,lines=0;
-    txns.forEach(function(t){
-      byType[t.type]=(byType[t.type]||0)+1;
-      byStatus[t.status]=(byStatus[t.status]||0)+1;
-      if(t.procurement)byProc[t.procurement]=(byProc[t.procurement]||0)+1;
-      if(t.pallets)pallets+=t.pallets;
-      var a=pA(t.analytic);lines+=a[0];items+=a[1];
-      var d=dkF(t.date);
-      if(d){
-        if(!byDate[d])byDate[d]={date:d,Inbound:0,"Stock correction":0,Moving:0,"Damage report":0};
-        if(typeof byDate[d][t.type]==="number")byDate[d][t.type]+=1;
-      }
-    });
+    var total=txns.length,byType={},byStatus={},byProc={},byDate={},pallets=0,items=0,lines=0;
+    txns.forEach(function(t){byType[t.type]=(byType[t.type]||0)+1;byStatus[t.status]=(byStatus[t.status]||0)+1;if(t.procurement)byProc[t.procurement]=(byProc[t.procurement]||0)+1;if(t.pallets)pallets+=t.pallets;var a=pA(t.analytic);lines+=a[0];items+=a[1];var d=dkF(t.deliveryAt);if(d){if(!byDate[d])byDate[d]={date:d,Inbound:0,"Outbound":0,Moving:0,"Damage report":0};if(typeof byDate[d][t.type]==="number")byDate[d][t.type]+=1;}});
     var dateArr=Object.values(byDate).sort(function(a,b){return a.date<b.date?-1:1;});
-    var procArr=Object.entries(byProc).map(function(en){return{name:en[0].length>22?en[0].slice(0,20)+"...":en[0],value:en[1]};}).sort(function(a,b){return b.value-a.value;});
+    var procArr=Object.entries(byProc).map(function(en){return{name:en[0].length>20?en[0].slice(0,18)+"...":en[0],value:en[1]};}).sort(function(a,b){return b.value-a.value;});
     var comp=byStatus["Completed"]||0,pend=byStatus["Created"]||0,inb=byType["Inbound"]||0;
-    var today=new Date().toISOString().slice(0,10);
-    var up=txns.filter(function(t){var d2=dkF(t.deliveryAt);return d2&&d2>=today&&t.status!=="Completed";}).sort(function(a,b){return(dkF(a.deliveryAt)||"").localeCompare(dkF(b.deliveryAt)||"");}).slice(0,8);
-    return{total:total,byType:byType,byStatus:byStatus,dateArr:dateArr,procArr:procArr,pallets:pallets,items:items,lines:lines,completed:comp,pending:pend,inbounds:inb,upcoming:up,recent:txns.slice(0,10)};
+    return{total:total,byType:byType,byStatus:byStatus,dateArr:dateArr,procArr:procArr,pallets:pallets,items:items,lines:lines,completed:comp,pending:pend,inbounds:inb,recent:txns.slice(0,7)};
   },[txns]);
 
   var has=txns&&txns.length>0&&st;
 
-  /* ── Render ── */
-  return e("div",{style:{minHeight:"100vh",background:"#0b0f19",color:TX}},
+  return e("div",{style:{height:"100vh",display:"flex",flexDirection:"column",background:"#0b0f19",color:TX,overflow:"hidden"}},
 
-    /* Header */
-    e("header",{style:{padding:"12px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid "+BD,background:S1}},
-      e("div",{style:{display:"flex",alignItems:"center",gap:12}},
-        e("div",{style:{width:36,height:36,borderRadius:8,background:GD,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:16,color:"#0b0f19"}},"W"),
-        e("div",null,
-          e("div",{style:{fontSize:15,fontWeight:700}},"Warehouse Operations"),
-          e("div",{style:{fontSize:10,color:TD}},"FIFA World Cup 2026 — Logistics Command")
-        )
+    e("header",{style:{padding:"0.6vh 1.2vw",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid "+BD,background:S1,flexShrink:0}},
+      e("div",{style:{display:"flex",alignItems:"center",gap:"0.5vw"}},
+        e("div",{style:{width:"2vw",height:"2vw",minWidth:24,minHeight:24,borderRadius:6,background:GD,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:"min(1vw,14px)",color:"#0b0f19"}},"W"),
+        e("div",null,e("div",{style:{fontSize:"min(0.85vw,14px)",fontWeight:700}},"Warehouse Operations"),e("div",{style:{fontSize:"min(0.55vw,9px)",color:TD}},"FIFA World Cup 2026 \u2014 Logistics Command"))
       ),
-      e("div",{style:{display:"flex",alignItems:"center",gap:14}},
-        fname?e("div",{style:{fontSize:10,color:TM,textAlign:"right"}},
-          e("span",{style:{color:TD}},fname),
-          updated?e("div",{style:{fontSize:9,marginTop:1}},"Updated "+new Date(updated).toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})):null
-        ):null,
-        e("label",{style:{background:S2,border:"1px solid "+BD,borderRadius:8,padding:"6px 14px",color:TX,fontSize:12,fontWeight:600,cursor:"pointer"}},
-          "↑ Upload",
-          e("input",{type:"file",accept:".xlsx,.xls,.csv",onChange:handleFile,style:{display:"none"}})
-        ),
-        e("div",{style:{fontFamily:"monospace",fontSize:16,fontWeight:700,color:GD}},clock.toLocaleTimeString("en-US",{hour12:false})),
-        e("div",{style:{width:7,height:7,borderRadius:"50%",background:sbOk?GR:AM,boxShadow:sbOk?"0 0 6px "+GR+"60":"none"}})
+      e("div",{style:{display:"flex",alignItems:"center",gap:"0.8vw"}},
+        fname?e("div",{style:{fontSize:"min(0.5vw,8px)",color:TM,textAlign:"right"}},e("span",{style:{color:TD}},fname),updated?e("div",{style:{fontSize:"min(0.45vw,7px)",marginTop:1}},"Updated "+new Date(updated).toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})):null):null,
+        e("label",{style:{background:S2,border:"1px solid "+BD,borderRadius:6,padding:"0.4vh 0.7vw",color:TX,fontSize:"min(0.6vw,10px)",fontWeight:600,cursor:"pointer"}},"\u2191 Upload",e("input",{type:"file",accept:".xlsx,.xls,.csv",onChange:handleFile,style:{display:"none"}})),
+        e("div",{style:{fontFamily:"monospace",fontSize:"min(0.9vw,15px)",fontWeight:700,color:GD}},clock.toLocaleTimeString("en-US",{hour12:false})),
+        e("div",{style:{width:6,height:6,borderRadius:"50%",background:sbOk?GR:AM,boxShadow:sbOk?"0 0 5px "+GR+"60":"none"}})
       )
     ),
 
-    /* Main */
-    e("main",{style:{padding:"16px 24px 24px",maxWidth:1700,margin:"0 auto"}},
+    e("main",{style:{flex:1,padding:"0.8vh 1.2vw",display:"flex",flexDirection:"column",gap:"0.7vh",overflow:"hidden",minHeight:0}},
 
-      /* Empty state */
-      !has&&ready?e("div",{style:{textAlign:"center",paddingTop:90,animation:"fadeUp .6s ease"}},
-        e("div",{style:{fontSize:50,opacity:.12,marginBottom:16}},"📦"),
+      !has&&ready?e("div",{style:{textAlign:"center",paddingTop:"20vh"}},
+        e("div",{style:{fontSize:50,opacity:.12,marginBottom:16}},"\uD83D\uDCE6"),
         e("div",{style:{fontSize:18,fontWeight:700,color:TD,marginBottom:8}},"No Data Loaded"),
         e("div",{style:{fontSize:13,color:TM,marginBottom:24}},"Upload your daily transactions .xlsx or .csv"),
-        e("label",{style:{display:"inline-block",background:GD,borderRadius:10,padding:"12px 36px",color:"#0b0f19",fontSize:14,fontWeight:700,cursor:"pointer"}},
-          "Choose File",
-          e("input",{type:"file",accept:".xlsx,.xls,.csv",onChange:handleFile,style:{display:"none"}})
-        )
+        e("label",{style:{display:"inline-block",background:GD,borderRadius:10,padding:"12px 36px",color:"#0b0f19",fontSize:14,fontWeight:700,cursor:"pointer"}},"Choose File",e("input",{type:"file",accept:".xlsx,.xls,.csv",onChange:handleFile,style:{display:"none"}}))
       ):null,
 
-      /* Dashboard */
-      has?e("div",{style:{animation:"fadeUp .5s ease"}},
+      has?e(React.Fragment,null,
 
         /* KPIs */
-        e("div",{style:{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}},
+        e("div",{style:{display:"flex",gap:"0.5vw",flexShrink:0}},
           e(KPI,{label:"Transactions",value:st.total,sub:Object.keys(st.byType).length+" types",color:GD}),
           e(KPI,{label:"Inbounds",value:st.inbounds,sub:Math.round(st.inbounds/st.total*100)+"% of total",color:CY}),
           e(KPI,{label:"Total Items",value:st.items.toLocaleString(),sub:st.lines+" lines",color:GR}),
@@ -287,129 +157,76 @@ function App(){
           e(KPI,{label:"Completed",value:st.completed,sub:Math.round(st.completed/st.total*100)+"% done",color:GR})
         ),
 
-        /* Charts row */
-        e("div",{style:{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:12,marginBottom:16}},
+        /* Mid row: timeline + donut + status */
+        e("div",{style:{display:"grid",gridTemplateColumns:"5fr 2fr 2fr",gap:"0.5vw",flex:5,minHeight:0}},
 
-          /* Timeline */
-          e("div",{style:{background:S1,border:"1px solid "+BD,borderRadius:12,padding:16}},
-            e("div",{style:{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:TD,marginBottom:12}},"Volume by Date"),
-            e(Timeline,{data:st.dateArr}),
-            e("div",{style:{display:"flex",gap:12,marginTop:10,justifyContent:"center"}},
-              ["Inbound","Stock correction","Moving","Damage report"].map(function(t){
-                return e("div",{key:t,style:{display:"flex",alignItems:"center",gap:4,fontSize:9}},
-                  e("span",{style:{width:8,height:4,borderRadius:1,background:TC[t],display:"inline-block"}}),
-                  e("span",{style:{color:TM}},t)
-                );
-              })
+          e("div",{style:{background:S1,border:"1px solid "+BD,borderRadius:8,padding:"0.8vh 0.8vw",display:"flex",flexDirection:"column",overflow:"hidden"}},
+            e("div",{style:{fontSize:"min(0.55vw,9px)",fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:TD,marginBottom:"0.5vh",flexShrink:0}},"Volume by Delivery Date"),
+            e("div",{style:{flex:1,minHeight:0}},e(Timeline,{data:st.dateArr}))
+          ),
+
+          e("div",{style:{background:S1,border:"1px solid "+BD,borderRadius:8,padding:"0.8vh 0.8vw",display:"flex",flexDirection:"column",overflow:"hidden"}},
+            e("div",{style:{fontSize:"min(0.55vw,9px)",fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:TD,marginBottom:"0.5vh",flexShrink:0}},"By Type"),
+            e("div",{style:{display:"flex",alignItems:"center",gap:"0.6vw",flex:1,minHeight:0}},
+              e("div",{style:{flexShrink:0}},e(Donut,{data:Object.entries(st.byType).map(function(en){return{name:en[0],value:en[1],color:TC[en[0]]||TD};})})),
+              e("div",{style:{display:"flex",flexDirection:"column",gap:"0.4vh"}},
+                Object.entries(st.byType).map(function(en){return e("div",{key:en[0],style:{display:"flex",alignItems:"center",gap:4,fontSize:"min(0.55vw,9px)"}},e("span",{style:{width:7,height:7,borderRadius:2,background:TC[en[0]]||TD,display:"inline-block"}}),e("span",{style:{color:TD,flex:1}},en[0]),e("span",{style:{color:TX,fontWeight:700,fontFamily:"monospace"}},en[1]));})
+              )
             )
           ),
 
-          /* Donut */
-          e("div",{style:{background:S1,border:"1px solid "+BD,borderRadius:12,padding:16}},
-            e("div",{style:{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:TD,marginBottom:12}},"By Type"),
-            e("div",{style:{display:"flex",justifyContent:"center",marginBottom:8}},
-              e(Donut,{data:Object.entries(st.byType).map(function(en){return{name:en[0],value:en[1],color:TC[en[0]]||TD};})})
-            ),
-            e("div",{style:{display:"flex",flexDirection:"column",gap:4}},
-              Object.entries(st.byType).map(function(en){
-                return e("div",{key:en[0],style:{display:"flex",alignItems:"center",gap:5,fontSize:10}},
-                  e("span",{style:{width:8,height:8,borderRadius:2,background:TC[en[0]]||TD,display:"inline-block"}}),
-                  e("span",{style:{color:TD,flex:1}},en[0]),
-                  e("span",{style:{color:TX,fontWeight:700,fontFamily:"monospace"}},en[1])
-                );
-              })
-            )
-          ),
-
-          /* Status */
-          e("div",{style:{background:S1,border:"1px solid "+BD,borderRadius:12,padding:16}},
-            e("div",{style:{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:TD,marginBottom:12}},"Status"),
-            Object.entries(st.byStatus).map(function(en){
-              var s=en[0],c=en[1],pct=Math.round(c/st.total*100),col=STC[s]||TD;
-              return e("div",{key:s,style:{marginBottom:12}},
-                e("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:4}},
-                  e("div",{style:{display:"flex",alignItems:"center",gap:4}},
-                    e("span",{style:{width:6,height:6,borderRadius:"50%",background:col,display:"inline-block"}}),
-                    e("span",{style:{fontSize:12,fontWeight:600,color:col}},s)
+          e("div",{style:{background:S1,border:"1px solid "+BD,borderRadius:8,padding:"0.8vh 0.8vw",display:"flex",flexDirection:"column",overflow:"hidden"}},
+            e("div",{style:{fontSize:"min(0.55vw,9px)",fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:TD,marginBottom:"0.5vh",flexShrink:0}},"Status"),
+            e("div",{style:{flex:1,display:"flex",flexDirection:"column",justifyContent:"space-between"}},
+              e("div",null,Object.entries(st.byStatus).map(function(en){
+                var s=en[0],c=en[1],pct=Math.round(c/st.total*100),col=STC[s]||TD;
+                return e("div",{key:s,style:{marginBottom:"0.7vh"}},
+                  e("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:2}},
+                    e("div",{style:{display:"flex",alignItems:"center",gap:3}},e("span",{style:{width:5,height:5,borderRadius:"50%",background:col,display:"inline-block"}}),e("span",{style:{fontSize:"min(0.65vw,11px)",fontWeight:600,color:col}},s)),
+                    e("span",{style:{fontFamily:"monospace",fontSize:"min(0.65vw,11px)",fontWeight:700,color:col}},c)
                   ),
-                  e("span",{style:{fontFamily:"monospace",fontSize:12,fontWeight:700,color:col}},c)
-                ),
-                e("div",{style:{height:4,borderRadius:2,background:S2,overflow:"hidden"}},
-                  e("div",{style:{height:"100%",borderRadius:2,width:pct+"%",background:col,transformOrigin:"left",animation:"barGrow .8s ease"}})
-                )
-              );
-            }),
-            e("div",{style:{marginTop:14,padding:"10px 12px",background:S2,borderRadius:8,border:"1px solid "+BD}},
-              e("div",{style:{fontSize:9,fontWeight:700,color:TM,textTransform:"uppercase",letterSpacing:1,marginBottom:3}},"Completion"),
-              e("div",{style:{fontFamily:"monospace",fontSize:24,fontWeight:800,color:GR}},((st.completed/st.total)*100).toFixed(1)+"%")
-            )
-          )
-        ),
-
-        /* Bottom row */
-        e("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
-
-          /* Procurement */
-          e("div",{style:{background:S1,border:"1px solid "+BD,borderRadius:12,padding:16}},
-            e("div",{style:{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:TD,marginBottom:12}},"By Functional Area"),
-            e(HBarChart,{data:st.procArr,colors:PRC})
-          ),
-
-          /* Table */
-          e("div",{style:{background:S1,border:"1px solid "+BD,borderRadius:12,padding:16,overflow:"hidden"}},
-            e("div",{style:{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:TD,marginBottom:12}},"Latest Transactions"),
-            e("div",{style:{overflowY:"auto",maxHeight:220}},
-              e("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:11}},
-                e("thead",null,
-                  e("tr",{style:{borderBottom:"1px solid "+BD}},
-                    ["#","Type","Shipment","Status","Date"].map(function(h){
-                      return e("th",{key:h,style:{padding:"4px 6px",textAlign:"left",fontSize:9,fontWeight:700,color:TM,textTransform:"uppercase"}},h);
-                    })
-                  )
-                ),
-                e("tbody",null,
-                  st.recent.map(function(t,i){
-                    return e("tr",{key:i,style:{borderBottom:"1px solid "+BD+"15"}},
-                      e("td",{style:{padding:6,fontFamily:"monospace",fontWeight:600,color:TD}},t.number),
-                      e("td",{style:{padding:6}},e(TTag,{type:t.type})),
-                      e("td",{style:{padding:6,color:TX,maxWidth:170,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.shipmentRef||"-"),
-                      e("td",{style:{padding:6}},e(Pill,{status:t.status})),
-                      e("td",{style:{padding:6,color:TM,fontSize:10}},fmtD(t.date))
-                    );
-                  })
-                )
+                  e("div",{style:{height:3,borderRadius:2,background:S2,overflow:"hidden"}},e("div",{style:{height:"100%",borderRadius:2,width:pct+"%",background:col}}))
+                );
+              })),
+              e("div",{style:{padding:"0.5vh 0.5vw",background:S2,borderRadius:6,border:"1px solid "+BD,textAlign:"center"}},
+                e("div",{style:{fontSize:"min(0.45vw,7px)",fontWeight:700,color:TM,textTransform:"uppercase",letterSpacing:1,marginBottom:1}},"Completion"),
+                e("div",{style:{fontFamily:"monospace",fontSize:"min(1.5vw,22px)",fontWeight:800,color:GR}},((st.completed/st.total)*100).toFixed(1)+"%")
               )
             )
           )
         ),
 
-        /* Upcoming */
-        st.upcoming.length>0?e("div",{style:{marginTop:12,background:S1,border:"1px solid "+BD,borderRadius:12,padding:"12px 16px"}},
-          e("div",{style:{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:TD,marginBottom:10,display:"flex",alignItems:"center",gap:6}},
-            e("span",{style:{width:6,height:6,borderRadius:"50%",background:AM,display:"inline-block",animation:"pulse 2s infinite"}}),
-            "Upcoming Deliveries"
+        /* Bottom: functional area + table */
+        e("div",{style:{display:"grid",gridTemplateColumns:"2fr 3fr",gap:"0.5vw",flex:4,minHeight:0}},
+
+          e("div",{style:{background:S1,border:"1px solid "+BD,borderRadius:8,padding:"0.8vh 0.8vw",display:"flex",flexDirection:"column",overflow:"hidden"}},
+            e("div",{style:{fontSize:"min(0.55vw,9px)",fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:TD,marginBottom:"0.5vh",flexShrink:0}},"By Functional Area"),
+            e("div",{style:{flex:1,display:"flex",flexDirection:"column",justifyContent:"center"}},e(HBar,{data:st.procArr,colors:PRC}))
           ),
-          e("div",{style:{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}},
-            st.upcoming.map(function(t,i){
-              return e("div",{key:i,style:{minWidth:180,padding:"10px 12px",background:S2,borderRadius:8,border:"1px solid "+BD,flexShrink:0}},
-                e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}},
-                  e("span",{style:{fontFamily:"monospace",fontWeight:700,color:GD,fontSize:12}},"#"+t.number),
-                  e(Pill,{status:t.status})
-                ),
-                e("div",{style:{fontSize:11,color:TX,marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},t.shipmentRef||t.procurement||"-"),
-                e("div",{style:{fontSize:10,color:TM}},"Due: "+fmtD(t.deliveryAt))
-              );
-            })
+
+          e("div",{style:{background:S1,border:"1px solid "+BD,borderRadius:8,padding:"0.8vh 0.8vw",display:"flex",flexDirection:"column",overflow:"hidden"}},
+            e("div",{style:{fontSize:"min(0.55vw,9px)",fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:TD,marginBottom:"0.5vh",flexShrink:0}},"Latest Transactions"),
+            e("div",{style:{flex:1,overflowY:"auto",minHeight:0}},
+              e("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:"min(0.6vw,10px)"}},
+                e("thead",null,e("tr",{style:{borderBottom:"1px solid "+BD}},["#","Type","Shipment","Status","Delivery"].map(function(h){return e("th",{key:h,style:{padding:"0.3vh 0.3vw",textAlign:"left",fontSize:"min(0.5vw,8px)",fontWeight:700,color:TM,textTransform:"uppercase",position:"sticky",top:0,background:S1}},h);}))),
+                e("tbody",null,st.recent.map(function(t,i){return e("tr",{key:i,style:{borderBottom:"1px solid "+BD+"15"}},
+                  e("td",{style:{padding:"0.35vh 0.3vw",fontFamily:"monospace",fontWeight:600,color:TD}},t.number),
+                  e("td",{style:{padding:"0.35vh 0.3vw"}},e(TTag,{type:t.type})),
+                  e("td",{style:{padding:"0.35vh 0.3vw",color:TX,maxWidth:"12vw",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.shipmentRef||"-"),
+                  e("td",{style:{padding:"0.35vh 0.3vw"}},e(Pill,{status:t.status})),
+                  e("td",{style:{padding:"0.35vh 0.3vw",color:TM}},fmtD(t.deliveryAt))
+                );}))
+              )
+            )
           )
-        ):null
+        )
 
       ):null
     ),
 
-    /* Footer */
-    e("footer",{style:{padding:"8px 24px",borderTop:"1px solid "+BD,display:"flex",justifyContent:"space-between",fontSize:9,color:TM}},
+    e("footer",{style:{padding:"0.4vh 1.2vw",borderTop:"1px solid "+BD,display:"flex",justifyContent:"space-between",fontSize:"min(0.5vw,8px)",color:TM,flexShrink:0}},
       e("span",null,"Warehouse Ops Dashboard v1.0"),
-      e("span",null,sbOk?"● Supabase Connected":"○ Connecting..."),
+      e("span",null,sbOk?"\u25CF Supabase Connected":"\u25CB Connecting..."),
       e("span",null,clock.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"}))
     )
   );
