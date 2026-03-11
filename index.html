@@ -35,13 +35,12 @@ var SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI
 
 /* Inventory table */
 var TBL_INV="inventory_state";
-function sbSaveInv(d){fetch(SB_URL+"/rest/v1/"+TBL_INV+"?id=eq.1",{method:"PATCH",headers:{"Content-Type":"application/json",apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,Prefer:"return=representation"},body:JSON.stringify({data:d,updated_at:new Date().toISOString()})}).then(function(r){return r.json();}).then(function(rows){if(!rows||rows.length===0){fetch(SB_URL+"/rest/v1/"+TBL_INV,{method:"POST",headers:{"Content-Type":"application/json",apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,Prefer:"return=minimal"},body:JSON.stringify({id:1,data:d,updated_at:new Date().toISOString()})});}}).catch(function(err){console.warn("sb-inv:",err);});}
+function sbSaveInv(){/* READ-ONLY: LM-3000 owns inventory_state */}
 function sbLoadInv(){return fetch(SB_URL+"/rest/v1/"+TBL_INV+"?id=eq.1&select=data,updated_at",{headers:{apikey:SB_KEY,Authorization:"Bearer "+SB_KEY}}).then(function(r){return r.json();}).then(function(rows){return(rows&&rows[0])||null;}).catch(function(){return null;});}
 
 /* Ops table */
 var TBL_OPS="dashboard_state";
-function sbSaveOps(d){fetch(SB_URL+"/rest/v1/"+TBL_OPS+"?id=eq.1",{method:"PATCH",headers:{"Content-Type":"application/json",apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,Prefer:"return=representation"},body:JSON.stringify({data:d,updated_at:new Date().toISOString()})}).then(function(r){return r.json();}).then(function(rows){if(!rows||rows.length===0){fetch(SB_URL+"/rest/v1/"+TBL_OPS,{method:"POST",headers:{"Content-Type":"application/json",apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,Prefer:"return=minimal"},body:JSON.stringify({id:1,data:d,updated_at:new Date().toISOString()})});}}).catch(function(err){console.warn("sb-ops:",err);});}
-function sbLoadOps(){return fetch(SB_URL+"/rest/v1/"+TBL_OPS+"?id=eq.1&select=data,updated_at",{headers:{apikey:SB_KEY,Authorization:"Bearer "+SB_KEY}}).then(function(r){return r.json();}).then(function(rows){return(rows&&rows[0])||null;}).catch(function(){return null;});}
+function sbSaveOps(){/* READ-ONLY: LM-3000 owns dashboard_state */}function sbLoadOps(){return fetch(SB_URL+"/rest/v1/"+TBL_OPS+"?id=eq.1&select=data,updated_at",{headers:{apikey:SB_KEY,Authorization:"Bearer "+SB_KEY}}).then(function(r){return r.json();}).then(function(rows){return(rows&&rows[0])||null;}).catch(function(){return null;});}
 
 /* MSR (Shipment) table */
 var TBL_MSR="msr_state";
@@ -201,7 +200,7 @@ function PasswordGate(p){
 
 /* ═══════════════════ INVENTORY DASHBOARD ═══════════════════ */
 function InventoryDash(p){
-  var stock=p.stock,nomen=p.nomen,updated=p.updatedInv,handleFiles=p.handleInvFiles,msg=p.invMsg,sbOk=p.sbOk,clock=p.clock;
+  var stock=p.stock,nomen=p.nomen,updated=p.updatedInv,msg=p.invMsg,sbOk=p.sbOk,clock=p.clock;
 
   var st=useMemo(function(){
     if(!stock||!stock.length)return null;
@@ -220,9 +219,9 @@ function InventoryDash(p){
   var has=stock&&stock.length>0&&st;
   if(!has)return e("div",{style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}},
     e("div",{style:{fontSize:40,opacity:.1}},"\uD83C\uDFED"),
-    e("div",{style:{fontSize:14,color:TD,fontWeight:600}},"No Inventory Data"),
-    e("div",{style:{fontSize:11,color:TM}},"Upload Stock Report + Nomenclature or configure a source URL"),
-    e("label",{style:{marginTop:8,background:TEAL,borderRadius:8,padding:"8px 28px",color:BG,fontSize:12,fontWeight:700,cursor:"pointer"}},"Select Files",e("input",{type:"file",accept:".xlsx,.xls,.csv",multiple:true,onChange:handleFiles,style:{display:"none"}}))
+    e("div",{style:{fontSize:14,color:TD,fontWeight:600}},"Waiting for Inventory Data"),
+    e("div",{style:{fontSize:11,color:TM}},"Syncing from LM-3000 \u2022 auto-refreshes every 60s"),
+    e("div",{style:{width:20,height:20,border:"2px solid "+TEAL,borderTop:"2px solid transparent",borderRadius:"50%",animation:"pulse 1s linear infinite",marginTop:8}})
   );
 
   return e(React.Fragment,null,
@@ -303,9 +302,9 @@ function OpsDash(p){
   var has=txns&&txns.length>0&&st;
   if(!has)return e("div",{style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}},
     e("div",{style:{fontSize:40,opacity:.1}},"\uD83D\uDCE6"),
-    e("div",{style:{fontSize:14,color:TD,fontWeight:600}},"No Operations Data"),
-    e("div",{style:{fontSize:11,color:TM}},"Upload transactions .xlsx/.csv or configure a source URL"),
-    e("label",{style:{marginTop:8,background:GD,borderRadius:8,padding:"8px 28px",color:BG,fontSize:12,fontWeight:700,cursor:"pointer"}},"Choose File",e("input",{type:"file",accept:".xlsx,.xls,.csv",onChange:p.handleOpsFile,style:{display:"none"}}))
+    e("div",{style:{fontSize:14,color:TD,fontWeight:600}},"Waiting for Operations Data"),
+    e("div",{style:{fontSize:11,color:TM}},"Syncing from LM-3000 \u2022 auto-refreshes every 60s"),
+    e("div",{style:{width:20,height:20,border:"2px solid "+GD,borderTop:"2px solid transparent",borderRadius:"50%",animation:"pulse 1s linear infinite",marginTop:8}})
   );
 
   return e(React.Fragment,null,
@@ -578,28 +577,62 @@ function MsrDash(p){
 
 /* ═══════════════════ LOAD PLAN AGGREGATOR ═══════════════════ */
 function aggregateLoadPlan(rows,nomenArr){
-  /* Build pallet lookup from nomenclature: code -> {qty, spaces} */
-  var palMap={};
-  if(nomenArr){nomenArr.forEach(function(n){
-    if(!n.code)return;
-    var qty=n.palQtyA||n.palQtyD||0;
-    var sp=n.palSpA||n.palSpD||0;
-    if(qty>0&&sp>0)palMap[n.code]={qty:qty,sp:sp};
-  });}
-
-  var agg={total:{lines:rows.length,requested:0,available:0,pallets:0,palletsAvail:0},byVenue:{},byProject:{},byItem:{},byCluster:{},byStatus:{},byVenueTop:[],hasPallets:Object.keys(palMap).length>0};
+  var agg={total:{lines:rows.length,requested:0,available:0,pallets:0,palletsAvail:0},byVenue:{},byProject:{},byItem:{},byCluster:{},byStatus:{},byVenueTop:[],byNom:{},hasPallets:false};
   rows.forEach(function(r){
     var req=Number(r["Requested"])||0,avail=Number(r["Available materials"])||0;
     var nomCode=r["Nomenclature"]||"";
-    var pal=palMap[nomCode];
-    var reqPal=0,availPal=0;
-    if(pal){reqPal=Math.ceil(req/pal.qty)*pal.sp;availPal=Math.ceil(avail/pal.qty)*pal.sp;}
-
-    agg.total.requested+=req;agg.total.available+=avail;agg.total.pallets+=reqPal;agg.total.palletsAvail+=availPal;
+    agg.total.requested+=req;agg.total.available+=avail;
+    /* Store per-nom-code breakdown for pallet recalc */
+    if(nomCode){
+      if(!agg.byNom[nomCode])agg.byNom[nomCode]={req:0,avail:0};
+      agg.byNom[nomCode].req+=req;agg.byNom[nomCode].avail+=avail;
+    }
     var pairs=[["byVenue",r["Venue"]||"?"],["byProject",r["Project"]||"?"],["byItem",r["Item"]||"?"],["byCluster",r["Venue cluster"]||"?"]];
-    pairs.forEach(function(p){var key=p[0],val=p[1];if(!agg[key][val])agg[key][val]={req:0,avail:0,lines:0,pallets:0,palletsAvail:0};agg[key][val].req+=req;agg[key][val].avail+=avail;agg[key][val].lines+=1;agg[key][val].pallets+=reqPal;agg[key][val].palletsAvail+=availPal;});
+    pairs.forEach(function(p){
+      var key=p[0],val=p[1];
+      if(!agg[key][val])agg[key][val]={req:0,avail:0,lines:0,pallets:0,palletsAvail:0,nr:{}};
+      agg[key][val].req+=req;agg[key][val].avail+=avail;agg[key][val].lines+=1;
+      if(nomCode){agg[key][val].nr[nomCode]=(agg[key][val].nr[nomCode]||0)+req;if(!agg[key][val].na)agg[key][val].na={};agg[key][val].na[nomCode]=(agg[key][val].na[nomCode]||0)+avail;}
+    });
     var s=r["Status"]||"?";agg.byStatus[s]=(agg.byStatus[s]||0)+1;
   });
+  /* Calculate pallets if nomen available */
+  if(nomenArr)recalcPallets(agg,nomenArr);
+  /* Build venue top */
+  agg.byVenueTop=Object.entries(agg.byVenue).map(function(en){return{name:en[0],req:en[1].req,avail:en[1].avail,lines:en[1].lines,pallets:en[1].pallets,palletsAvail:en[1].palletsAvail};}).sort(function(a,b){return b.req-a.req;});
+  return agg;
+}
+
+function recalcPallets(agg,nomenArr){
+  if(!nomenArr||!nomenArr.length)return agg;
+  /* Build pallet lookup */
+  var palMap={};
+  nomenArr.forEach(function(n){
+    if(!n.code)return;
+    var qty=n.palQtyD||n.palQtyA||0;
+    var sp=n.palSpD||n.palSpA||0;
+    if(qty>0&&sp>0)palMap[n.code]={qty:qty,sp:sp};
+  });
+  if(!Object.keys(palMap).length)return agg;
+  agg.hasPallets=true;
+  /* Recalc totals from byNom */
+  var tp=0,tpa=0;
+  Object.entries(agg.byNom||{}).forEach(function(en){
+    var pal=palMap[en[0]];if(!pal)return;
+    tp+=Math.ceil(en[1].req/pal.qty)*pal.sp;
+    tpa+=Math.ceil(en[1].avail/pal.qty)*pal.sp;
+  });
+  agg.total.pallets=tp;agg.total.palletsAvail=tpa;
+  /* Recalc per group */
+  ["byVenue","byProject","byItem","byCluster"].forEach(function(gk){
+    Object.values(agg[gk]||{}).forEach(function(g){
+      var gp=0,gpa=0;
+      Object.entries(g.nr||{}).forEach(function(en){var pal=palMap[en[0]];if(!pal)return;gp+=Math.ceil(en[1]/pal.qty)*pal.sp;});
+      Object.entries(g.na||{}).forEach(function(en){var pal=palMap[en[0]];if(!pal)return;gpa+=Math.ceil(en[1]/pal.qty)*pal.sp;});
+      g.pallets=gp;g.palletsAvail=gpa;
+    });
+  });
+  /* Rebuild venueTop */
   agg.byVenueTop=Object.entries(agg.byVenue).map(function(en){return{name:en[0],req:en[1].req,avail:en[1].avail,lines:en[1].lines,pallets:en[1].pallets,palletsAvail:en[1].palletsAvail};}).sort(function(a,b){return b.req-a.req;});
   return agg;
 }
@@ -962,7 +995,12 @@ function App(){
       if(inv&&inv.data){if(inv.data.stock)setStock(inv.data.stock);if(inv.data.nomen)setNomen(inv.data.nomen);if(inv.data.fnames)setFnamesInv(inv.data.fnames);setUpdatedInv(inv.updated_at);}
       if(ops&&ops.data&&ops.data.txns){setTxns(ops.data.txns.map(function(t){var tp=t.type;if(tp==="Stock correction")tp="Outbound";return Object.assign({},t,{type:tp});}));setFnameOps(ops.data.fname||"");setUpdatedOps(ops.updated_at);}
       if(msr&&msr.data&&msr.data.shipments){setShipments(msr.data.shipments);setUpdatedMsr(msr.updated_at);}
-      if(lpd&&lpd.data){setLoadPlan(lpd.data);setUpdatedLp(lpd.updated_at);}
+      if(lpd&&lpd.data){
+        var lpAgg=lpd.data;
+        /* Recalc pallets if nomen available from LM-3000 */
+        if(inv&&inv.data&&inv.data.nomen&&inv.data.nomen.length)recalcPallets(lpAgg,inv.data.nomen);
+        setLoadPlan(lpAgg);setUpdatedLp(lpd.updated_at);
+      }
       setSbOk(true);
     }).catch(function(){setSbOk(true);});
   },[authed]);
@@ -979,37 +1017,17 @@ function App(){
     return function(){clearInterval(t);};
   },[authed]);
 
-  /* ── Parse downloaded buffers ── */
-  function parseInvBuffer(buf){
-    try{
-      var wb=XLSX.read(new Uint8Array(buf),{type:"array"});
-      var sheet=wb.Sheets[wb.SheetNames[0]];
-      var rows=XLSX.utils.sheet_to_json(sheet,{defval:null});
-      if(!rows.length)return;
-      var cols=Object.keys(rows[0]);
-      if((cols.indexOf("Asset owner")>=0||cols.indexOf("Day in stock")>=0)&&cols.indexOf("Item price, USD")<0){
-        var newStock=rows.map(function(r2){return{code:r2["Nomenclature code"],name:r2["Nomenclature name"],owner:r2["Asset owner"],source:r2["Source"],stock:r2["Stock"]||0,reserve:r2["Reserve"]||0,available:r2["Available"]||0,uom:r2["UoM"],days:r2["Day in stock"]||0};});
-        setStock(newStock);sbSaveInv({stock:newStock,nomen:nomen,fnames:fnamesInv});setUpdatedInv(new Date().toISOString());
-        setSpMsg("Stock synced");setTimeout(function(){setSpMsg("");},4000);
-      } else if(cols.indexOf("Item price, USD")>=0||cols.indexOf("Nomenclature type")>=0){
-        var newNom=rows.map(function(r2){return{code:r2["Nomenclature code"],name:r2["Nomenclature name"],type:r2["Nomenclature type"],price:r2["Item price, USD"]||0,source:r2["Source"],country:r2["Country of origin"],palQtyA:Number(r2["Pallet quantity, assembled"])||0,palSpA:Number(r2["Pallet spaces, assembled"])||0,palQtyD:Number(r2["Pallet quantity, disassembled"])||0,palSpD:Number(r2["Pallet spaces, disassembled"])||0};});
-        setNomen(newNom);sbSaveInv({stock:stock,nomen:newNom,fnames:fnamesInv});setUpdatedInv(new Date().toISOString());
-        setSpMsg("Catalog synced");setTimeout(function(){setSpMsg("");},4000);
-      }
-    }catch(ex){console.warn("Parse inv error:",ex);}
-  }
-  function parseOpsBuffer(buf){
-    try{
-      var wb=XLSX.read(new Uint8Array(buf),{type:"array"});
-      var sheet=wb.Sheets[wb.SheetNames[0]];
-      var rows=XLSX.utils.sheet_to_json(sheet,{defval:null}).map(mapRow);
-      if(!rows.length)return;
-      setTxns(rows);setFnameOps("SharePoint");sbSaveOps({txns:rows,fname:"SharePoint"});setUpdatedOps(new Date().toISOString());
-      setSpMsg("Ops synced");setTimeout(function(){setSpMsg("");},4000);
-    }catch(ex){console.warn("Parse ops error:",ex);}
-  }
+  /* Recalc Load Plan pallets when nomenclature changes (from LM-3000 via Supabase) */
+  useEffect(function(){
+    if(!nomen||!nomen.length||!loadPlan)return;
+    var updated=recalcPallets(loadPlan,nomen);
+    setLoadPlan(Object.assign({},updated));
+    sbSaveLp(updated);
+  },[nomen]);
 
-  /* ── Poll Supabase Storage bucket for files from Power Automate ── */
+  /* ── Inv & Ops are READ-ONLY from LM-3000 Supabase — no local parsing ── */
+
+  /* ── Poll Supabase Storage bucket for MSR/LP files from Power Automate ── */
   useEffect(function(){
     if(!authed||!cfg.enabled)return;
     var active=true;
@@ -1022,21 +1040,24 @@ function App(){
         files.forEach(function(f){
           if(!f.name)return;
           var key=f.name+"|"+f.updated_at;
-          var isInv=f.name.toLowerCase().indexOf("inventory")>=0||f.name.toLowerCase().indexOf("stock")>=0||f.name.toLowerCase().indexOf("nomenclature")>=0||f.name.toLowerCase().indexOf("catalog")>=0;
-          var isOps=f.name.toLowerCase().indexOf("operation")>=0||f.name.toLowerCase().indexOf("transaction")>=0;
-          /* Default: first file found = inventory, named "operations.*" = ops */
-          if(!isInv&&!isOps){
-            if(f.name==="inventory.xlsx"||f.name==="inventory.csv")isInv=true;
-            else if(f.name==="operations.xlsx"||f.name==="operations.csv")isOps=true;
-            else isInv=true;/* fallback */
+          var isMsr=f.name.toLowerCase().indexOf("msr")>=0||f.name.toLowerCase().indexOf("shipment")>=0;
+          var isLp=f.name.toLowerCase().indexOf("loadplan")>=0||f.name.toLowerCase().indexOf("load_plan")>=0||f.name.toLowerCase().indexOf("report_fifa")>=0;
+          if(isMsr&&lastModRef.current.msr!==key){
+            lastModRef.current.msr=key;
+            sbDownloadFile(f.name).then(function(buf){
+              try{var wb=XLSX.read(new Uint8Array(buf),{type:"array",cellDates:true});var sheet=wb.Sheets[wb.SheetNames[0]];var rows=XLSX.utils.sheet_to_json(sheet,{defval:null,range:2});
+                var mapped=rows.filter(function(r2){return r2["Name"]&&String(r2["Name"]).trim()!=="";}).map(mapMsrRow);
+                if(mapped.length){setShipments(mapped);sbSaveMsr({shipments:mapped});setUpdatedMsr(new Date().toISOString());setSpMsg("MSR synced");setTimeout(function(){setSpMsg("");},4000);}
+              }catch(ex){console.warn("SP MSR parse:",ex);}
+            }).catch(function(err){console.warn("DL msr:",err);});
           }
-          if(isInv&&lastModRef.current.inv!==key){
-            lastModRef.current.inv=key;
-            sbDownloadFile(f.name).then(function(buf){parseInvBuffer(buf);}).catch(function(err){console.warn("DL inv:",err);});
-          }
-          if(isOps&&lastModRef.current.ops!==key){
-            lastModRef.current.ops=key;
-            sbDownloadFile(f.name).then(function(buf){parseOpsBuffer(buf);}).catch(function(err){console.warn("DL ops:",err);});
+          if(isLp&&lastModRef.current.lp!==key){
+            lastModRef.current.lp=key;
+            sbDownloadFile(f.name).then(function(buf){
+              try{var wb=XLSX.read(new Uint8Array(buf),{type:"array"});var sheet=wb.Sheets[wb.SheetNames[0]];var rows=XLSX.utils.sheet_to_json(sheet,{defval:null});
+                if(rows.length){var agg=aggregateLoadPlan(rows,nomen);setLoadPlan(agg);sbSaveLp(agg);setUpdatedLp(new Date().toISOString());setSpMsg("LP synced");setTimeout(function(){setSpMsg("");},4000);}
+              }catch(ex){console.warn("SP LP parse:",ex);}
+            }).catch(function(err){console.warn("DL lp:",err);});
           }
         });
       }).catch(function(err){console.warn("Storage poll error:",err);});
@@ -1047,27 +1068,7 @@ function App(){
     return function(){active=false;clearInterval(t);};
   },[authed,cfg.enabled,cfg.interval]);
 
-  /* File handlers */
-  function handleInvFiles(ev){
-    var files=ev.target.files;if(!files||!files.length)return;
-    var pending=files.length,newStock=null,newNomen=null,newFn=Object.assign({},fnamesInv);
-    function finish(){pending--;if(pending>0)return;if(newStock)setStock(newStock);if(newNomen)setNomen(newNomen);setFnamesInv(newFn);setUpdatedInv(new Date().toISOString());sbSaveInv({stock:newStock||stock,nomen:newNomen||nomen,fnames:newFn});setInvMsg(newStock&&newNomen?"Both loaded":newStock?"Stock loaded":"Catalog loaded");setTimeout(function(){setInvMsg("");},3000);}
-    Array.from(files).forEach(function(file){
-      var reader=new FileReader();reader.onload=function(evt){
-        try{var wb=XLSX.read(new Uint8Array(evt.target.result),{type:"array"});var sheet=wb.Sheets[wb.SheetNames[0]];var rows=XLSX.utils.sheet_to_json(sheet,{defval:null});if(!rows.length){finish();return;}var cols=Object.keys(rows[0]);
-          if((cols.indexOf("Asset owner")>=0||cols.indexOf("Day in stock")>=0)&&cols.indexOf("Item price, USD")<0){newStock=rows.map(function(r2){return{code:r2["Nomenclature code"],name:r2["Nomenclature name"],owner:r2["Asset owner"],source:r2["Source"],stock:r2["Stock"]||0,reserve:r2["Reserve"]||0,available:r2["Available"]||0,uom:r2["UoM"],days:r2["Day in stock"]||0};});newFn.s=file.name;}
-          else if(cols.indexOf("Item price, USD")>=0||cols.indexOf("Nomenclature type")>=0){newNomen=rows.map(function(r2){return{code:r2["Nomenclature code"],name:r2["Nomenclature name"],type:r2["Nomenclature type"],price:r2["Item price, USD"]||0,source:r2["Source"],country:r2["Country of origin"],palQtyA:Number(r2["Pallet quantity, assembled"])||0,palSpA:Number(r2["Pallet spaces, assembled"])||0,palQtyD:Number(r2["Pallet quantity, disassembled"])||0,palSpD:Number(r2["Pallet spaces, disassembled"])||0};});newFn.n=file.name;}
-        }catch(err){console.error(err);}finish();};reader.readAsArrayBuffer(file);
-    });ev.target.value="";}
-
-  function handleOpsFile(ev){
-    var file=ev.target.files&&ev.target.files[0];if(!file)return;
-    var reader=new FileReader();reader.onload=function(evt){
-      try{var rows;if(file.name.match(/\.csv$/i)){var result=Papa.parse(evt.target.result,{header:true,skipEmptyLines:true});rows=result.data.map(mapRow);}else{var data=new Uint8Array(evt.target.result);var wb=XLSX.read(data,{type:"array"});var sheet=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(sheet,{defval:null}).map(mapRow);}
-        setTxns(rows);setFnameOps(file.name);var now=new Date().toISOString();setUpdatedOps(now);sbSaveOps({txns:rows,fname:file.name});
-      }catch(err){console.error(err);}
-    };if(file.name.match(/\.csv$/i))reader.readAsText(file);else reader.readAsArrayBuffer(file);ev.target.value="";}
-
+  /* MSR file handler */
   function handleMsrFile(ev){
     var file=ev.target.files&&ev.target.files[0];if(!file)return;
     var reader=new FileReader();reader.onload=function(evt){
@@ -1160,9 +1161,8 @@ function App(){
         invMsg?e("span",{style:{fontSize:"min(0.38vw,6px)",color:GR,fontWeight:600}},invMsg):null,
         spMsg?e("span",{style:{fontSize:"min(0.38vw,6px)",color:BL,fontWeight:600}},spMsg):null,
         cfg.enabled?e("span",{style:{fontSize:"min(0.35vw,6px)",color:GR}},"\u25CF SP Sync"):null,
-        /* Upload for current tab */
-        tab===0?e("label",{style:{background:S2,border:"1px solid "+BD,borderRadius:4,padding:"0.15vh 0.4vw",color:TEAL,fontSize:"min(0.42vw,7px)",fontWeight:600,cursor:"pointer"}},"\u2191 Inventory",e("input",{type:"file",accept:".xlsx,.xls,.csv",multiple:true,onChange:handleInvFiles,style:{display:"none"}})):
-        tab===1?e("label",{style:{background:S2,border:"1px solid "+BD,borderRadius:4,padding:"0.15vh 0.4vw",color:GD,fontSize:"min(0.42vw,7px)",fontWeight:600,cursor:"pointer"}},"\u2191 Operations",e("input",{type:"file",accept:".xlsx,.xls,.csv",onChange:handleOpsFile,style:{display:"none"}})):
+        /* Upload / source indicator per tab */
+        tab<=1?e("span",{style:{background:S2,border:"1px solid "+BD,borderRadius:4,padding:"0.15vh 0.4vw",fontSize:"min(0.42vw,7px)",fontWeight:600,color:TEAL,display:"flex",alignItems:"center",gap:3}},e("span",{style:{width:4,height:4,borderRadius:"50%",background:TEAL,display:"inline-block"}}),"LM-3000"):
         tab===2?e("label",{style:{background:S2,border:"1px solid "+BD,borderRadius:4,padding:"0.15vh 0.4vw",color:BRAND,fontSize:"min(0.42vw,7px)",fontWeight:600,cursor:"pointer"}},"\u2191 MSR",e("input",{type:"file",accept:".xlsx,.xls",onChange:handleMsrFile,style:{display:"none"}})):
         e("label",{style:{background:S2,border:"1px solid "+BD,borderRadius:4,padding:"0.15vh 0.4vw",color:OR,fontSize:"min(0.42vw,7px)",fontWeight:600,cursor:"pointer"}},"\u2191 Load Plan",e("input",{type:"file",accept:".xlsx,.xls",onChange:handleLpFile,style:{display:"none"}})),
         /* Settings gear */
@@ -1174,8 +1174,8 @@ function App(){
 
     /* MAIN CONTENT */
     e("main",{style:{flex:1,padding:"0.4vh 0.5vw",display:"flex",flexDirection:"column",gap:"0.3vh",overflow:"hidden",minHeight:0}},
-      tab===0?e(InventoryDash,{stock:stock,nomen:nomen,updatedInv:updatedInv,handleInvFiles:handleInvFiles,invMsg:invMsg,sbOk:sbOk,clock:clock}):
-      tab===1?e(OpsDash,{txns:txns,updatedOps:updatedOps,handleOpsFile:handleOpsFile,sbOk:sbOk,clock:clock}):
+      tab===0?e(InventoryDash,{stock:stock,nomen:nomen,updatedInv:updatedInv,invMsg:invMsg,sbOk:sbOk,clock:clock}):
+      tab===1?e(OpsDash,{txns:txns,updatedOps:updatedOps,sbOk:sbOk,clock:clock}):
       tab===2?e(MsrDash,{shipments:shipments,updatedMsr:updatedMsr,handleMsrFile:handleMsrFile,clock:clock}):
       e(LoadPlanDash,{loadPlan:loadPlan,updatedLp:updatedLp,handleLpFile:handleLpFile,clock:clock})
     ),
