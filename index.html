@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>SM\u00b2ARTA Dash</title>
+<title>SM²ARTA Dash</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 224 224'%3E%3Cpolygon fill='%23CF5D5D' points='43,182 180,182 223,224 202,224 177,195 194,224 29,224 46,195 22,224 0,224'/%3E%3Cpath fill='black' d='M184 60c-5,-29 -34,-48 -63,-48l-25 0c-77,0 -80,118 7,118l24 0c14,0 15,24 0,24l-26 0c-6,0 -12,-5 -14,-10l-47 8c6,29 34,49 63,49l19 0c42,0 64,-30 63,-60 0,-29 -22,-58 -64,-58l-23 0c-15,0 -15,-25 0,-25l26 0c6,0 11,5 13,11l47 -9z'/%3E%3C/svg%3E"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -47,6 +47,11 @@ function sbLoadOps(){return fetch(SB_URL+"/rest/v1/"+TBL_OPS+"?id=eq.1&select=da
 var TBL_MSR="msr_state";
 function sbSaveMsr(d){fetch(SB_URL+"/rest/v1/"+TBL_MSR+"?id=eq.1",{method:"PATCH",headers:{"Content-Type":"application/json",apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,Prefer:"return=representation"},body:JSON.stringify({data:d,updated_at:new Date().toISOString()})}).then(function(r){return r.json();}).then(function(rows){if(!rows||rows.length===0){fetch(SB_URL+"/rest/v1/"+TBL_MSR,{method:"POST",headers:{"Content-Type":"application/json",apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,Prefer:"return=minimal"},body:JSON.stringify({id:1,data:d,updated_at:new Date().toISOString()})});}}).catch(function(err){console.warn("sb-msr:",err);});}
 function sbLoadMsr(){return fetch(SB_URL+"/rest/v1/"+TBL_MSR+"?id=eq.1&select=data,updated_at",{headers:{apikey:SB_KEY,Authorization:"Bearer "+SB_KEY}}).then(function(r){return r.json();}).then(function(rows){return(rows&&rows[0])||null;}).catch(function(){return null;});}
+
+/* Load Plan table */
+var TBL_LP="loadplan_state";
+function sbSaveLp(d){fetch(SB_URL+"/rest/v1/"+TBL_LP+"?id=eq.1",{method:"PATCH",headers:{"Content-Type":"application/json",apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,Prefer:"return=representation"},body:JSON.stringify({data:d,updated_at:new Date().toISOString()})}).then(function(r){return r.json();}).then(function(rows){if(!rows||rows.length===0){fetch(SB_URL+"/rest/v1/"+TBL_LP,{method:"POST",headers:{"Content-Type":"application/json",apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,Prefer:"return=minimal"},body:JSON.stringify({id:1,data:d,updated_at:new Date().toISOString()})});}}).catch(function(err){console.warn("sb-lp:",err);});}
+function sbLoadLp(){return fetch(SB_URL+"/rest/v1/"+TBL_LP+"?id=eq.1&select=data,updated_at",{headers:{apikey:SB_KEY,Authorization:"Bearer "+SB_KEY}}).then(function(r){return r.json();}).then(function(rows){return(rows&&rows[0])||null;}).catch(function(){return null;});}
 
 /* ═══════════════════ COLORS ═══════════════════ */
 var BG="#070b14",S1="#0e1525",S2="#151d2e",BD="#1a2744",TX="#e2e8f0",TD="#7a8ba8",TM="#4a5a74";
@@ -569,6 +574,162 @@ function MsrDash(p){
 
 
 
+
+
+/* ═══════════════════ LOAD PLAN AGGREGATOR ═══════════════════ */
+function aggregateLoadPlan(rows){
+  var agg={total:{lines:rows.length,requested:0,available:0},byVenue:{},byProject:{},byItem:{},byCluster:{},byStatus:{},byVenueTop:[]};
+  rows.forEach(function(r){
+    var req=Number(r["Requested"])||0,avail=Number(r["Available materials"])||0;
+    agg.total.requested+=req;agg.total.available+=avail;
+    var pairs=[["byVenue",r["Venue"]||"?"],["byProject",r["Project"]||"?"],["byItem",r["Item"]||"?"],["byCluster",r["Venue cluster"]||"?"]];
+    pairs.forEach(function(p){var key=p[0],val=p[1];if(!agg[key][val])agg[key][val]={req:0,avail:0,lines:0};agg[key][val].req+=req;agg[key][val].avail+=avail;agg[key][val].lines+=1;});
+    var s=r["Status"]||"?";agg.byStatus[s]=(agg.byStatus[s]||0)+1;
+  });
+  agg.byVenueTop=Object.entries(agg.byVenue).map(function(en){return{name:en[0],req:en[1].req,avail:en[1].avail,lines:en[1].lines};}).sort(function(a,b){return b.req-a.req;});
+  return agg;
+}
+
+/* ═══════════════════ LOAD PLAN DASHBOARD ═══════════════════ */
+var LP_PC={"Event Transport":CYAN,"Host Broadcast Production":GD,"Competition Management":PU,"Ticketing":AM,"Safety & Security":RD,"Partnership Rights Delivery":OR,"Accreditation":BL,"Event Logistics":TEAL,"Technology":"#60a5fa","Volunteer Management":GR,"Media Operations & Services":PK,"Ceremonies":"#a3e635","Guest Operations":"#818cf8","Venue Management":"#fb7185"};
+
+function LoadPlanDash(p){
+  var lp=p.loadPlan;
+
+  var st=useMemo(function(){
+    if(!lp)return null;
+    var t=lp.total;
+    var fillRate=t.requested>0?Math.round(t.available/t.requested*100):0;
+    var venueArr=(lp.byVenueTop||[]).slice(0,16).map(function(v){
+      var fill=v.req>0?Math.round(v.avail/v.req*100):0;
+      var short=v.name.replace(" Stadium","").replace("New York / New Jersey","NY/NJ").replace("San Francisco Bay Area","SF Bay");
+      return{name:short,fullName:v.name,req:v.req,avail:v.avail,lines:v.lines,fill:fill};
+    });
+    var projArr=Object.entries(lp.byProject).map(function(en){
+      var fill=en[1].req>0?Math.round(en[1].avail/en[1].req*100):0;
+      return{name:en[0],req:en[1].req,avail:en[1].avail,lines:en[1].lines,fill:fill,color:LP_PC[en[0]]||TD};
+    }).sort(function(a,b){return b.req-a.req;});
+    var itemArr=Object.entries(lp.byItem).map(function(en){
+      return{name:en[0].length>30?en[0].slice(0,28)+"..":en[0],fullName:en[0],req:en[1].req,avail:en[1].avail,lines:en[1].lines};
+    }).sort(function(a,b){return b.req-a.req;}).slice(0,12);
+    var clusterArr=Object.entries(lp.byCluster).map(function(en){
+      return{name:en[0].replace(" / RGS","").replace(" / CORT",""),fullName:en[0],req:en[1].req,avail:en[1].avail,lines:en[1].lines,isRGS:en[0].indexOf("RGS")>=0};
+    }).sort(function(a,b){return b.req-a.req;}).slice(0,12);
+    var statArr=Object.entries(lp.byStatus).map(function(en){return{name:en[0],value:en[1]};}).sort(function(a,b){return b.value-a.value;});
+    return{total:t,fillRate:fillRate,venueArr:venueArr,projArr:projArr,itemArr:itemArr,clusterArr:clusterArr,statArr:statArr,uniqueItems:Object.keys(lp.byItem).length,uniqueVenues:Object.keys(lp.byVenue).length};
+  },[lp]);
+
+  var has=lp&&st;
+  if(!has)return e("div",{style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}},
+    e("div",{style:{fontSize:40,opacity:.1}},"\uD83D\uDCCB"),
+    e("div",{style:{fontSize:14,color:TD,fontWeight:600}},"No Load Plan Data"),
+    e("div",{style:{fontSize:11,color:TM}},"Upload venue demand report (.xlsx)"),
+    e("label",{style:{marginTop:8,background:OR,borderRadius:8,padding:"8px 28px",color:BG,fontSize:12,fontWeight:700,cursor:"pointer"}},"Upload Load Plan",e("input",{type:"file",accept:".xlsx,.xls",onChange:p.handleLpFile,style:{display:"none"}}))
+  );
+
+  function FillBar(pr){
+    var pct=Math.min(pr.fill,100);var col=pct>=80?GR:pct>=50?AM:RD;
+    return e("div",{style:{display:"flex",alignItems:"center",gap:4}},
+      e("div",{style:{flex:1,height:pr.h||"0.6vh",minHeight:3,background:S2,borderRadius:3,overflow:"hidden"}},
+        e("div",{style:{height:"100%",width:pct+"%",background:col,borderRadius:3,opacity:.8}})
+      ),
+      e("span",{style:{fontSize:"min(0.4vw,7px)",fontWeight:700,fontFamily:"monospace",color:col,minWidth:"2vw",textAlign:"right"}},pct+"%")
+    );
+  }
+
+  return e(React.Fragment,null,
+    e("div",{style:{display:"flex",gap:"0.3vw",flexShrink:0}},
+      e(KPI,{label:"Line Items",value:fmtN(st.total.lines),sub:st.uniqueItems+" unique products",color:OR}),
+      e(KPI,{label:"Requested",value:fmtN(st.total.requested),sub:"total units",color:CYAN}),
+      e(KPI,{label:"Available",value:fmtN(st.total.available),sub:"in stock",color:GR}),
+      e(KPI,{label:"Fill Rate",value:st.fillRate+"%",sub:fmtN(st.total.requested-st.total.available)+" gap",color:st.fillRate>=70?GR:st.fillRate>=40?AM:RD}),
+      e(KPI,{label:"Venues",value:st.uniqueVenues,sub:st.clusterArr.length+" clusters",color:BL}),
+      e(KPI,{label:"Projects",value:st.projArr.length,sub:"functional areas",color:PU}),
+      e(KPI,{label:"Confirmed",value:fmtN((lp.byStatus["Confirmed"]||0)),sub:fmtN(lp.byStatus["Pending"]||0)+" pending",color:GR})
+    ),
+    e("div",{style:{display:"grid",gridTemplateColumns:"2fr 1.2fr",gap:"0.3vw",flex:5,minHeight:0}},
+      e(BoxOps,{title:"Demand by Venue (top 16)"},
+        e("div",{style:{flex:1,overflowY:"auto",minHeight:0}},
+          e("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:"min(0.5vw,9px)"}},
+            e("thead",null,e("tr",{style:{borderBottom:"1px solid "+BD}},["Venue","Requested","Available","Fill Rate"].map(function(h){return e("th",{key:h,style:{padding:"0.2vh 0.25vw",textAlign:"left",fontSize:"min(0.4vw,7px)",fontWeight:700,color:TM,textTransform:"uppercase",position:"sticky",top:0,background:S1,zIndex:1}},h);}))),
+            e("tbody",null,st.venueArr.map(function(v,i){
+              return e("tr",{key:i,style:{borderBottom:"1px solid "+BD+"10"}},
+                e("td",{style:{padding:"0.25vh 0.25vw",color:TX,fontSize:"min(0.48vw,8px)",fontWeight:600,maxWidth:"10vw",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},title:v.fullName},v.name),
+                e("td",{style:{padding:"0.25vh 0.25vw",fontFamily:"monospace",fontWeight:700,color:CYAN,fontSize:"min(0.48vw,8px)"}},fmtN(v.req)),
+                e("td",{style:{padding:"0.25vh 0.25vw",fontFamily:"monospace",color:GR,fontSize:"min(0.48vw,8px)"}},fmtN(v.avail)),
+                e("td",{style:{padding:"0.25vh 0.3vw",minWidth:"6vw"}},e(FillBar,{fill:v.fill}))
+              );
+            }))
+          )
+        )
+      ),
+      e("div",{style:{display:"flex",flexDirection:"column",gap:"0.3vw",minHeight:0}},
+        e(BoxOps,{title:"Demand by Project",style:{flex:3}},
+          e("div",{style:{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:"0.3vh",justifyContent:"center"}},
+            st.projArr.slice(0,14).map(function(pr,i){
+              var maxReq=st.projArr[0]?st.projArr[0].req:1;var pct=Math.max(Math.round(pr.req/maxReq*100),3);
+              return e("div",{key:i,style:{display:"flex",alignItems:"center",gap:4}},
+                e("div",{style:{width:"6vw",fontSize:"min(0.45vw,8px)",color:pr.color,textAlign:"right",flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:600},title:pr.name},pr.name.length>18?pr.name.slice(0,16)+"..":pr.name),
+                e("div",{style:{flex:1,height:"0.8vh",minHeight:4,background:S2,borderRadius:3,overflow:"hidden"}},
+                  e("div",{style:{height:"100%",width:pct+"%",background:pr.color,borderRadius:3,opacity:.75}})
+                ),
+                e("span",{style:{fontSize:"min(0.42vw,7px)",fontWeight:700,color:pr.color,fontFamily:"monospace",minWidth:"2.5vw",textAlign:"right"}},fmtN(pr.req))
+              );
+            })
+          )
+        ),
+        e(BoxOps,{title:"Status Breakdown",style:{flex:1}},
+          e("div",{style:{display:"flex",gap:"0.3vw",flex:1,alignItems:"center",justifyContent:"center"}},
+            st.statArr.map(function(s,i){
+              var col=s.name==="Confirmed"?GR:s.name==="Pending"?AM:s.name==="Declined"?RD:BL;
+              return e("div",{key:i,style:{flex:1,textAlign:"center",padding:"0.3vh 0",background:col+"12",borderRadius:4,border:"1px solid "+col+"25"}},
+                e("div",{style:{fontSize:"min(0.8vw,14px)",fontWeight:800,fontFamily:"monospace",color:col}},fmtN(s.value)),
+                e("div",{style:{fontSize:"min(0.35vw,6px)",color:col,opacity:.7}},s.name)
+              );
+            })
+          )
+        )
+      )
+    ),
+    e("div",{style:{display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:"0.3vw",flex:4,minHeight:0}},
+      e(BoxOps,{title:"Top Items by Demand"},
+        e("div",{style:{flex:1,overflowY:"auto",minHeight:0}},
+          e("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:"min(0.5vw,9px)"}},
+            e("thead",null,e("tr",{style:{borderBottom:"1px solid "+BD}},["Item","Requested","Available","Fill"].map(function(h){return e("th",{key:h,style:{padding:"0.2vh 0.25vw",textAlign:"left",fontSize:"min(0.4vw,7px)",fontWeight:700,color:TM,textTransform:"uppercase",position:"sticky",top:0,background:S1,zIndex:1}},h);}))),
+            e("tbody",null,st.itemArr.map(function(it,i){
+              var fill=it.req>0?Math.round(it.avail/it.req*100):0;
+              return e("tr",{key:i,style:{borderBottom:"1px solid "+BD+"10"}},
+                e("td",{style:{padding:"0.2vh 0.25vw",color:TX,fontSize:"min(0.48vw,8px)",maxWidth:"12vw",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},title:it.fullName},it.name),
+                e("td",{style:{padding:"0.2vh 0.25vw",fontFamily:"monospace",fontWeight:700,color:CYAN}},fmtN(it.req)),
+                e("td",{style:{padding:"0.2vh 0.25vw",fontFamily:"monospace",color:GR}},fmtN(it.avail)),
+                e("td",{style:{padding:"0.2vh 0.3vw",minWidth:"5vw"}},e(FillBar,{fill:fill}))
+              );
+            }))
+          )
+        )
+      ),
+      e(BoxOps,{title:"Venue Clusters"},
+        e("div",{style:{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:"0.3vh"}},
+          st.clusterArr.map(function(cl,i){
+            var fill=cl.req>0?Math.round(cl.avail/cl.req*100):0;
+            var col=cl.isRGS?TEAL:BL;
+            return e("div",{key:i,style:{padding:"0.3vh 0.4vw",background:S2,borderRadius:5,border:"1px solid "+BD}},
+              e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"0.1vh"}},
+                e("div",{style:{display:"flex",alignItems:"center",gap:4}},
+                  e("span",{style:{width:5,height:5,borderRadius:2,background:col,display:"inline-block"}}),
+                  e("span",{style:{fontSize:"min(0.48vw,8px)",color:TX,fontWeight:600}},cl.name)
+                ),
+                e("span",{style:{fontSize:"min(0.42vw,7px)",fontFamily:"monospace",fontWeight:700,color:CYAN}},fmtN(cl.req))
+              ),
+              e(FillBar,{fill:fill,h:"0.4vh"})
+            );
+          })
+        )
+      )
+    )
+  );
+}
+
 /* ═══════════════════ SUPABASE STORAGE (for SharePoint bridge) ═══════════════════ */
 var BUCKET="dashboard-files";
 
@@ -734,6 +895,10 @@ function App(){
   var _msr=useState(null),shipments=_msr[0],setShipments=_msr[1];
   var _uM=useState(null),updatedMsr=_uM[0],setUpdatedMsr=_uM[1];
 
+  /* Load Plan state */
+  var _lp=useState(null),loadPlan=_lp[0],setLoadPlan=_lp[1];
+  var _uL=useState(null),updatedLp=_uL[0],setUpdatedLp=_uL[1];
+
   /* Settings */
   var _showS=useState(false),showSettings=_showS[0],setShowSettings=_showS[1];
   var _cfg=useState({enabled:false,interval:5}),cfg=_cfg[0],setCfg=_cfg[1];
@@ -763,7 +928,7 @@ function App(){
     var countdown=setInterval(function(){
       rotRef.current=rotRef.current-1;
       if(rotRef.current<=0){
-        setTab(function(t){return(t+1)%3;});
+        setTab(function(t){return(t+1)%4;});
         rotRef.current=ROTATE_MS/1000;
       }
       setRotTm(rotRef.current);
@@ -774,11 +939,12 @@ function App(){
   /* Initial load from Supabase */
   useEffect(function(){
     if(!authed)return;
-    Promise.all([sbLoadInv(),sbLoadOps(),sbLoadMsr()]).then(function(res){
-      var inv=res[0],ops=res[1],msr=res[2];
+    Promise.all([sbLoadInv(),sbLoadOps(),sbLoadMsr(),sbLoadLp()]).then(function(res){
+      var inv=res[0],ops=res[1],msr=res[2],lpd=res[3];
       if(inv&&inv.data){if(inv.data.stock)setStock(inv.data.stock);if(inv.data.nomen)setNomen(inv.data.nomen);if(inv.data.fnames)setFnamesInv(inv.data.fnames);setUpdatedInv(inv.updated_at);}
       if(ops&&ops.data&&ops.data.txns){setTxns(ops.data.txns.map(function(t){var tp=t.type;if(tp==="Stock correction")tp="Outbound";return Object.assign({},t,{type:tp});}));setFnameOps(ops.data.fname||"");setUpdatedOps(ops.updated_at);}
       if(msr&&msr.data&&msr.data.shipments){setShipments(msr.data.shipments);setUpdatedMsr(msr.updated_at);}
+      if(lpd&&lpd.data){setLoadPlan(lpd.data);setUpdatedLp(lpd.updated_at);}
       setSbOk(true);
     }).catch(function(){setSbOk(true);});
   },[authed]);
@@ -790,6 +956,7 @@ function App(){
       sbLoadInv().then(function(inv){if(inv&&inv.data){if(inv.data.stock)setStock(inv.data.stock);if(inv.data.nomen)setNomen(inv.data.nomen);if(inv.data.fnames)setFnamesInv(inv.data.fnames);setUpdatedInv(inv.updated_at);}});
       sbLoadOps().then(function(ops){if(ops&&ops.data&&ops.data.txns){setTxns(ops.data.txns.map(function(t2){var tp=t2.type;if(tp==="Stock correction")tp="Outbound";return Object.assign({},t2,{type:tp});}));setFnameOps(ops.data.fname||"");setUpdatedOps(ops.updated_at);}});
       sbLoadMsr().then(function(msr){if(msr&&msr.data&&msr.data.shipments){setShipments(msr.data.shipments);setUpdatedMsr(msr.updated_at);}});
+      sbLoadLp().then(function(lpd){if(lpd&&lpd.data){setLoadPlan(lpd.data);setUpdatedLp(lpd.updated_at);}});
     },60000);
     return function(){clearInterval(t);};
   },[authed]);
@@ -901,6 +1068,23 @@ function App(){
       }catch(err){console.error("MSR parse error:",err);}
     };reader.readAsArrayBuffer(file);ev.target.value="";}
 
+  function handleLpFile(ev){
+    var file=ev.target.files&&ev.target.files[0];if(!file)return;
+    var reader=new FileReader();reader.onload=function(evt){
+      try{
+        var data=new Uint8Array(evt.target.result);
+        var wb=XLSX.read(data,{type:"array"});
+        var sheet=wb.Sheets[wb.SheetNames[0]];
+        var rows=XLSX.utils.sheet_to_json(sheet,{defval:null});
+        if(rows.length>0){
+          var agg=aggregateLoadPlan(rows);
+          setLoadPlan(agg);var now=new Date().toISOString();setUpdatedLp(now);
+          sbSaveLp(agg);
+          setInvMsg("Load Plan: "+rows.length+" lines");setTimeout(function(){setInvMsg("");},3000);
+        }
+      }catch(err){console.error("LP parse error:",err);}
+    };reader.readAsArrayBuffer(file);ev.target.value="";}
+
   function saveCfg(newCfg){
     setCfg(newCfg);
     try{window.localStorage.setItem("wh_dash_cfg",JSON.stringify(newCfg));}catch(ex){}
@@ -916,7 +1100,8 @@ function App(){
   var tabs=[
     {label:"Inventory",icon:"I",color:TEAL},
     {label:"Operations",icon:"O",color:GD},
-    {label:"Shipments",icon:"S",color:BRAND}
+    {label:"Shipments",icon:"S",color:BRAND},
+    {label:"Load Plan",icon:"L",color:OR}
   ];
 
   return e("div",{style:{height:"100vh",display:"flex",flexDirection:"column",background:BG,color:TX,overflow:"hidden"}},
@@ -951,7 +1136,8 @@ function App(){
         e("div",{style:{display:"flex",gap:"0.3vw",fontSize:"min(0.38vw,6px)"}},
           e("span",{style:{color:stock?GR:TM}},stock?"\u2713Inv":"\u25CBInv"),
           e("span",{style:{color:txns?GR:TM}},txns?"\u2713Ops":"\u25CBOps"),
-          e("span",{style:{color:shipments?GR:TM}},shipments?"\u2713MSR":"\u25CBMSR")
+          e("span",{style:{color:shipments?GR:TM}},shipments?"\u2713MSR":"\u25CBMSR"),
+          e("span",{style:{color:loadPlan?GR:TM}},loadPlan?"\u2713LP":"\u25CBLP")
         ),
         invMsg?e("span",{style:{fontSize:"min(0.38vw,6px)",color:GR,fontWeight:600}},invMsg):null,
         spMsg?e("span",{style:{fontSize:"min(0.38vw,6px)",color:BL,fontWeight:600}},spMsg):null,
@@ -959,7 +1145,8 @@ function App(){
         /* Upload for current tab */
         tab===0?e("label",{style:{background:S2,border:"1px solid "+BD,borderRadius:4,padding:"0.15vh 0.4vw",color:TEAL,fontSize:"min(0.42vw,7px)",fontWeight:600,cursor:"pointer"}},"\u2191 Inventory",e("input",{type:"file",accept:".xlsx,.xls,.csv",multiple:true,onChange:handleInvFiles,style:{display:"none"}})):
         tab===1?e("label",{style:{background:S2,border:"1px solid "+BD,borderRadius:4,padding:"0.15vh 0.4vw",color:GD,fontSize:"min(0.42vw,7px)",fontWeight:600,cursor:"pointer"}},"\u2191 Operations",e("input",{type:"file",accept:".xlsx,.xls,.csv",onChange:handleOpsFile,style:{display:"none"}})):
-        e("label",{style:{background:S2,border:"1px solid "+BD,borderRadius:4,padding:"0.15vh 0.4vw",color:BRAND,fontSize:"min(0.42vw,7px)",fontWeight:600,cursor:"pointer"}},"\u2191 MSR",e("input",{type:"file",accept:".xlsx,.xls",onChange:handleMsrFile,style:{display:"none"}})),
+        tab===2?e("label",{style:{background:S2,border:"1px solid "+BD,borderRadius:4,padding:"0.15vh 0.4vw",color:BRAND,fontSize:"min(0.42vw,7px)",fontWeight:600,cursor:"pointer"}},"\u2191 MSR",e("input",{type:"file",accept:".xlsx,.xls",onChange:handleMsrFile,style:{display:"none"}})):
+        e("label",{style:{background:S2,border:"1px solid "+BD,borderRadius:4,padding:"0.15vh 0.4vw",color:OR,fontSize:"min(0.42vw,7px)",fontWeight:600,cursor:"pointer"}},"\u2191 Load Plan",e("input",{type:"file",accept:".xlsx,.xls",onChange:handleLpFile,style:{display:"none"}})),
         /* Settings gear */
         e("button",{onClick:function(){setShowSettings(true);},style:{background:"transparent",border:"1px solid "+BD,borderRadius:4,padding:"0.15vh 0.3vw",color:TD,fontSize:"min(0.5vw,9px)",cursor:"pointer",lineHeight:1}},"\u2699"),
         e("div",{style:{fontFamily:"monospace",fontSize:"min(0.7vw,11px)",fontWeight:700,color:tabs[tab].color}},clock.toLocaleTimeString("en-US",{hour12:false})),
@@ -971,7 +1158,8 @@ function App(){
     e("main",{style:{flex:1,padding:"0.4vh 0.5vw",display:"flex",flexDirection:"column",gap:"0.3vh",overflow:"hidden",minHeight:0}},
       tab===0?e(InventoryDash,{stock:stock,nomen:nomen,updatedInv:updatedInv,handleInvFiles:handleInvFiles,invMsg:invMsg,sbOk:sbOk,clock:clock}):
       tab===1?e(OpsDash,{txns:txns,updatedOps:updatedOps,handleOpsFile:handleOpsFile,sbOk:sbOk,clock:clock}):
-      e(MsrDash,{shipments:shipments,updatedMsr:updatedMsr,handleMsrFile:handleMsrFile,clock:clock})
+      tab===2?e(MsrDash,{shipments:shipments,updatedMsr:updatedMsr,handleMsrFile:handleMsrFile,clock:clock}):
+      e(LoadPlanDash,{loadPlan:loadPlan,updatedLp:updatedLp,handleLpFile:handleLpFile,clock:clock})
     ),
 
     /* FOOTER */
